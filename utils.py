@@ -35,11 +35,11 @@ def str2bool(word):
         return False
 
 
-def read_data_set(files):
+def read_data_set(files, test_size=0.5):
     test_peptides, test_targets, peptide_length, allele = get_test_matrix(files['test_set'])
     seq_matrix, target_matrix = get_train_matrix(files['train_set'], allele, peptide_length)
     train_peptides, test_peptides, train_targets, test_targets = train_test_split(seq_matrix, target_matrix,
-                                                                                  test_size=0.5, random_state=1)
+                                                                                  test_size=0.05, random_state=1)
 
     # map the training peptide sequences to their integer index
     feature_matrix = np.empty((0, peptide_length), dtype=int)

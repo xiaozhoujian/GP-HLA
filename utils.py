@@ -2,6 +2,8 @@ import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
 from collections import OrderedDict
+from sklearn.metrics import roc_auc_score, roc_curve, auc
+from scipy import stats
 
 
 AA_IDX = OrderedDict([
@@ -74,7 +76,7 @@ def get_test_matrix(test_file):
         test_data['Measurement_value'] = np.where(test_data.Measurement_value < 500.0, 1, 0)
     test_peptide = test_data.Peptide_seq
     test_target = test_data.Measurement_value
-    test_target = test_target.as_matrix()
+    test_target = test_target.to_numpy()
     # for i in range(test_target.shape[0]):
     #     if test_target[i] == 1:
     #         test_category[i][0] = 1
@@ -101,7 +103,7 @@ def get_train_matrix(train_file, allele, peptide_length):
 
     seq_matrix = filtered_xb_data.sequence
     target_matrix = filtered_xb_data.target
-    target_matrix = target_matrix.as_matrix()
+    target_matrix = target_matrix.to_numpy()
 
     category_matrix = np.zeros((target_matrix.shape[0], 2))
     for i in range(target_matrix.shape[0]):
@@ -122,3 +124,58 @@ def sequence2int(peptide_sequence):
     for amino_acid in peptide_sequence:
         peptide_array.append(AA_IDX[amino_acid])
     return np.asarray(peptide_array)
+
+
+
+
+# Copyright 2019 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""A set of utility operations for running examples.
+"""
+
+thread = 0.5
+
+
+def _accuracy(y, y_hat):
+  """Compute the accuracy of the predictions with respect to one-hot labels."""
+  binary_y = (y > thread)[:, 0].astype(int)
+  return np.mean(binary_y== y_hat)
+
+def aucs(y, y_hat):
+    binary_y = (y > thread)[:, 0].astype(int)
+    mean_fpr, mean_tpr, mean_thresholds = roc_curve(binary_y, y_hat, pos_label=1)
+    mean_auc = auc(mean_fpr, mean_tpr)
+    rho, pValue = stats.spearmanr(y_hat, y)
+    print('SRCC: ' + str(round(rho, 3)))
+    print('AUC: ' + str(round(mean_auc,3)))
+
+
+
+def print_summary(name, labels, net_p, lin_p, loss):
+  """Print summary information comparing a network with its linearization."""
+  net_p = np.array(net_p)
+  #lin_p = np.array(lin_p)
+
+  print('\nEvaluating Network on {} data.'.format(name))
+  print('---------------------------------------')
+  print('Network Accuracy = {}'.format(_accuracy(net_p, labels)))
+  aucs(net_p, labels)
+  print('Network Loss = {}'.format(loss(net_p, labels)))
+  # if lin_p is not None:
+  #   print('Linearization Accuracy = {}'.format(_accuracy(lin_p, labels)))
+  #   print('Linearization Loss = {}'.format(loss(lin_p, labels)))
+  #   print('RMSE of predictions: {}'.format(
+  #       np.sqrt(np.mean((net_p - lin_p) ** 2))))
+  # print('---------------------------------------')

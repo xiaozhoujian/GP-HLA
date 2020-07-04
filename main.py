@@ -7,7 +7,7 @@ import nngp
 
 if __name__ == '__main__':
     config = configparser.ConfigParser()
-    config.read(sys.argv[1])
+    config.read('config.ini')
 
     if str2bool(config['Pipeline']['vector']):
         print("Start to convert amino acid sequence to the vector")

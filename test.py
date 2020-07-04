@@ -112,11 +112,10 @@ def main():
 
     start = time.time()
     # Bayesian and infinite-time gradient descent inference with infinite network.
-    fx_test_nngp, fx_test_ntk = nt.predict.gp_inference(kernel_fn, x_train, y_train, x_test,
+    fx_test_nngp, fx_test_ntk = nt.predict.gradient_descent_mse_ensemble(kernel_fn, x_train, y_train, x_test,
                                                         get=('nngp', 'ntk'), diag_reg=1e-3)
     fx_test_nngp.block_until_ready()
     fx_test_ntk.block_until_ready()
-
     duration = time.time() - start
     print('Kernel construction and inference done in %s seconds.' % duration)
 

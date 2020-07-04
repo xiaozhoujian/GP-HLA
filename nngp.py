@@ -15,33 +15,46 @@ from jax.experimental import optimizers
 from jax.experimental.stax import logsoftmax
 from jax.api import grad
 import datasets
+import jax.experimental.stax as ostax
 
+import utils
 
 def infinite_fcn(train_embedding, test_embedding, data_set):
     _, _, kernel_fn = stax.serial(
-        stax.Dense(1, 2., 0.05),
+        stax.Dense(64, 2., 0.05),
         stax.Relu(),
-        stax.Dense(1, 2., 0.05)
+        stax.Dense(32, 2., 0.05),
+        stax.Relu(),
+        stax.Dense(4, 2., 0.05),
+        stax.Relu(),
     )
     # 0 for no batching, whole batch
     kernel_fn = nt.batch(kernel_fn,
                          device_count=0,
                          batch_size=0)
     start = time.time()
+    data_set['Y_train']= np.argmax(data_set['Y_train'],-1)[:,np.newaxis]
+    data_set['Y_test']= np.argmax(data_set['Y_test'],-1)[:,np.newaxis]
     # Bayesian and infinite-time gradient descent inference with infinite network.
-    for i in range(10):
-        fx_test_nngp, fx_test_ntk = nt.predict.gp_inference(kernel_fn, train_embedding, data_set['Y_train'], test_embedding,
-                                                            get=('nngp', 'ntk'), diag_reg=1e-3)
-        fx_test_nngp.block_until_ready()
-        fx_test_ntk.block_until_ready()
+    #for i in range(10):
+    predict_fn = \
+            nt.predict.gradient_descent_mse_ensemble(kernel_fn, train_embedding, data_set['Y_train'],
+                                                     learning_rate=1, diag_reg=1e-4)
+
+
+    nngp_mean, nngp_covariance = predict_fn(x_test=test_embedding, get='nngp',
+                                            compute_cov=True)
+
+    #fx_test_nngp.block_until_ready()
+    #fx_test_ntk.block_until_ready()
 
     duration = time.time() - start
     print('Kernel construction and inference done in %s seconds.' % duration)
 
     # Print out accuracy and loss for infinite network predictions.
     loss = lambda fx, y_hat: 0.5 * np.mean((fx - y_hat) ** 2)
-    util.print_summary('NNGP test', data_set['Y_test'], fx_test_nngp, None, loss)
-    util.print_summary('NTK test', data_set['Y_test'], fx_test_ntk, None, loss)
+    utils.print_summary('NNGP test', data_set['Y_test'], nngp_mean, None, loss)
+    #util.print_summary('NTK test', data_set['Y_test'], ntk_mean, None, loss)
 
 
 def weight_space(train_embedding, test_embedding, data_set):
@@ -151,6 +164,6 @@ def train(params, files):
     test_embedding = embedding(torch.from_numpy(data_set['X_test'])).numpy()
     test_embedding = test_embedding.reshape((test_embedding.shape[0], -1))
     # weight_space(train_embedding, test_embedding, data_set)
-    # infinite_fcn(train_embedding, test_embedding, data_set)
-    infinite_resnet(train_embedding, test_embedding, data_set)
+    infinite_fcn(train_embedding, test_embedding, data_set)
+    #infinite_resnet(train_embedding, test_embedding, data_set)
 

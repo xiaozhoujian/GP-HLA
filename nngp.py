@@ -39,7 +39,7 @@ def infinite_fcn(train_embedding, test_embedding, data_set):
     #for i in range(10):
     predict_fn = \
             nt.predict.gradient_descent_mse_ensemble(kernel_fn, train_embedding, data_set['Y_train'],
-                                                     learning_rate=1, diag_reg=1e-4)
+                                                     diag_reg_absolute_scale=True, learning_rate=1, diag_reg=1e-3) #1e0 1e-3
 
 
     nngp_mean, nngp_covariance = predict_fn(x_test=test_embedding, get='nngp',
@@ -53,7 +53,7 @@ def infinite_fcn(train_embedding, test_embedding, data_set):
 
     # Print out accuracy and loss for infinite network predictions.
     loss = lambda fx, y_hat: 0.5 * np.mean((fx - y_hat) ** 2)
-    utils.print_summary('NNGP test', data_set['Y_test'], nngp_mean, None, loss)
+    utils.print_summary('NNGP test', data_set['Y_test'], nngp_mean, None, loss,nngp_covariance)
     #util.print_summary('NTK test', data_set['Y_test'], ntk_mean, None, loss)
 
 

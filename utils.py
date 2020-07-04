@@ -41,7 +41,7 @@ def read_data_set(files, test_size=0.5):
     test_peptides, test_targets, peptide_length, allele = get_test_matrix(files['test_set'])
     seq_matrix, target_matrix = get_train_matrix(files['train_set'], allele, peptide_length)
     train_peptides, test_peptides, train_targets, test_targets = train_test_split(seq_matrix, target_matrix,
-                                                                                  test_size=0.05, random_state=1)
+                                                                                  test_size=0.05, random_state=2)
 
     # map the training peptide sequences to their integer index
     feature_matrix = np.empty((0, peptide_length), dtype=int)
@@ -148,30 +148,35 @@ def sequence2int(peptide_sequence):
 thread = 0.5
 
 
-def _accuracy(y, y_hat):
+def _accuracy(y, y_hat,variance):
   """Compute the accuracy of the predictions with respect to one-hot labels."""
-  binary_y = (y > thread)[:, 0].astype(int)
+  binary_y = (y-variance > thread)[:, 0].astype(int)
+  equal = (binary_y == y_hat)
+  all_zero = np.mean(1 == y_hat)
+  print('zero_variance: ' + str(round(np.mean(equal*variance), 10)))
+  print('one_variance: ' + str(round(np.mean((1-equal)*variance), 10)))
   return np.mean(binary_y== y_hat)
 
-def aucs(y, y_hat):
-    binary_y = (y > thread)[:, 0].astype(int)
-    mean_fpr, mean_tpr, mean_thresholds = roc_curve(binary_y, y_hat, pos_label=1)
+def aucs(y, y_hat, variance):
+    binary_y = np.clip(y ,0,1)
+    mean_fpr, mean_tpr, mean_thresholds = roc_curve(y_hat, binary_y, pos_label=1)
     mean_auc = auc(mean_fpr, mean_tpr)
-    rho, pValue = stats.spearmanr(y_hat, y)
+    rho, pValue = stats.spearmanr(y_hat, binary_y)
     print('SRCC: ' + str(round(rho, 3)))
     print('AUC: ' + str(round(mean_auc,3)))
 
 
 
-def print_summary(name, labels, net_p, lin_p, loss):
+def print_summary(name, labels, net_p, lin_p, loss,variance):
   """Print summary information comparing a network with its linearization."""
   net_p = np.array(net_p)
+  variance = np.diag(np.array(variance))
   #lin_p = np.array(lin_p)
 
   print('\nEvaluating Network on {} data.'.format(name))
   print('---------------------------------------')
-  print('Network Accuracy = {}'.format(_accuracy(net_p, labels)))
-  aucs(net_p, labels)
+  print('Network Accuracy = {}'.format(_accuracy(net_p, labels,variance)))
+  aucs(net_p, labels,variance)
   print('Network Loss = {}'.format(loss(net_p, labels)))
   # if lin_p is not None:
   #   print('Linearization Accuracy = {}'.format(_accuracy(lin_p, labels)))

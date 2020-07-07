@@ -157,14 +157,14 @@ def _accuracy(y, y_hat,variance):
   print('one_variance: ' + str(round(np.mean((1-equal)*variance), 10)))
   return np.mean(binary_y== y_hat)
 
-def aucs(y, y_hat, variance):
-    binary_y = np.clip(y ,0,1)
+
+def aucs(y, y_hat, variance=0):
+    binary_y = np.clip(y, 0, 1)
     mean_fpr, mean_tpr, mean_thresholds = roc_curve(y_hat, binary_y, pos_label=1)
     mean_auc = auc(mean_fpr, mean_tpr)
     rho, pValue = stats.spearmanr(y_hat, binary_y)
     print('SRCC: ' + str(round(rho, 3)))
-    print('AUC: ' + str(round(mean_auc,3)))
-
+    print('AUC: ' + str(round(mean_auc, 3)))
 
 
 def print_summary(name, labels, net_p, lin_p, loss,variance):

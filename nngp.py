@@ -16,6 +16,8 @@ from jax.experimental.stax import logsoftmax
 from jax.api import grad
 import datasets
 import jax.experimental.stax as ostax
+from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
 
 import utils
 
@@ -132,10 +134,23 @@ def infinite_resnet(train_embedding, test_embedding, data_set):
     util.print_summary('NTK test', data_set['Y_test'], fx_test_ntk, None, loss)
 
 
+def gaussian_process(train_embedding, test_embedding, data_set):
+    # Instantiate a Gaussian Process model
+    kernel = 1.0 * RBF(1.0)
+    gp = GaussianProcessClassifier(kernel=kernel, random_state=0)
+    y_train = np.argmax(data_set['Y_train'], axis=-1)
+    # gp.fit(train_embedding, data_set['Y_train'])
+    gp.fit(train_embedding, y_train)
+    y_test = np.argmax(data_set['Y_test'], axis=-1)
+    y_pred = gp.predict(test_embedding)
+    # utils.aucs(data_set['Y_test'], y_pred)
+    utils.aucs(y_test, y_pred)
+
+
 def train(params, files):
     data_set, peptide_n_mer = read_data_set(files, test_size=0.05)
-    print(data_set['X_train'].shape)
-    print(data_set['X_test'].shape)
+    print('Train data shape is {}'.format(data_set['X_train'].shape))
+    print('Train data shape is {}'.format(data_set['X_test'].shape))
     # variable batch size depending on number of data points
     batch_size = int(np.ceil(len(data_set['X_train']) / 100.0))
     epochs = int(params['epochs'])
@@ -164,6 +179,8 @@ def train(params, files):
     test_embedding = embedding(torch.from_numpy(data_set['X_test'])).numpy()
     test_embedding = test_embedding.reshape((test_embedding.shape[0], -1))
     # weight_space(train_embedding, test_embedding, data_set)
-    infinite_fcn(train_embedding, test_embedding, data_set)
+    # infinite_fcn(train_embedding, test_embedding, data_set)
     #infinite_resnet(train_embedding, test_embedding, data_set)
+    print("The result of gaussian process is:")
+    gaussian_process(train_embedding, test_embedding, data_set)
 

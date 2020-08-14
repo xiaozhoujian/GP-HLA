@@ -37,11 +37,11 @@ def str2bool(word):
         return False
 
 
-def read_data_set(files, test_size=0.5):
-    test_peptides, test_targets, peptide_length, allele = get_test_matrix(files['test_set'])
-    seq_matrix, target_matrix = get_train_matrix(files['train_set'], allele, peptide_length)
+def read_data_set(files, test_size=0.05, binary=True):
+    test_peptides, test_targets, peptide_length, allele = get_test_matrix(files['test_set'], binary=binary)
+    seq_matrix, target_matrix = get_train_matrix(files['train_set'], allele, peptide_length, binary=binary)
     train_peptides, test_peptides, train_targets, test_targets = train_test_split(seq_matrix, target_matrix,
-                                                                                  test_size=0.05, random_state=2)
+                                                                                  test_size=test_size, random_state=2)
 
     # map the training peptide sequences to their integer index
     feature_matrix = np.empty((0, peptide_length), dtype=int)
@@ -62,32 +62,35 @@ def read_data_set(files, test_size=0.5):
     return data_set, peptide_length
 
 
-def get_test_matrix(test_file):
+def get_test_matrix(test_file, binary=True):
     test_data = pd.read_csv(test_file, delim_whitespace=True)
     allele = test_data['Allele'][0]
     peptide_length = len(test_data['Peptide_seq'][0])
     measurement_type = test_data['Measurement_type'][0]
     # the first dimension is 1 represent IC50 < 500
-    # test_category = np.zeros((len(test_data), 2))
 
     if measurement_type.lower() == 'binary':
         test_data['Measurement_value'] = np.where(test_data.Measurement_value == 1.0, 1, 0)
     else:
-        test_data['Measurement_value'] = np.where(test_data.Measurement_value < 500.0, 1, 0)
+        # test_data['Measurement_value'] = np.where(test_data.Measurement_value < 500.0, 1, 0)
+        test_data['Measurement_value'] = 1 - np.log(test_data.Measurement_value)/np.log(50000)
     test_peptide = test_data.Peptide_seq
     test_target = test_data.Measurement_value
     test_target = test_target.to_numpy()
-    # for i in range(test_target.shape[0]):
-    #     if test_target[i] == 1:
-    #         test_category[i][0] = 1
-    #     else:
-    #         test_category[i][1] = 0
+    if binary:
+        test_category = np.zeros((len(test_data), 2))
+        for i in range(test_target.shape[0]):
+            if test_target[i] == 1:
+                test_category[i][0] = 1
+            else:
+                test_category[i][1] = 0
+        return test_peptide, test_category, peptide_length, allele
 
     return test_peptide, test_target, peptide_length, allele
 
 
-def get_train_matrix(train_file, allele, peptide_length):
-    train_data = pd.read_csv(train_file, delim_whitespace=True, header=0)
+def get_train_matrix(train_file, allele, peptide_length, binary=True):
+    train_data = pd.read_csv(train_file, sep='\t', header=0)
     train_data.columns = ['sequence', 'HLA', 'target']
 
     # build training matrix
@@ -98,20 +101,22 @@ def get_train_matrix(train_file, allele, peptide_length):
     filtered_x_data = peptide_data[~peptide_data.sequence.str.contains('X')]
     filtered_xb_data = filtered_x_data[~filtered_x_data.sequence.str.contains('B')]
 
-    # remap target values to 1's and 0's
-    filtered_xb_data['target'] = np.where(filtered_xb_data.target == 1, 1, 0)
-
     seq_matrix = filtered_xb_data.sequence
     target_matrix = filtered_xb_data.target
     target_matrix = target_matrix.to_numpy()
+    if binary:
+        # remap target values to 1's and 0's
+        filtered_xb_data['target'] = np.where(filtered_xb_data.target == 1, 1, 0)
 
-    category_matrix = np.zeros((target_matrix.shape[0], 2))
-    for i in range(target_matrix.shape[0]):
-        if target_matrix[i] == 1:
-            category_matrix[i][0] = 1
-        else:
-            category_matrix[i][1] = 1
-    return seq_matrix, category_matrix
+        category_matrix = np.zeros((target_matrix.shape[0], 2))
+        for i in range(target_matrix.shape[0]):
+            if target_matrix[i] == 1:
+                category_matrix[i][0] = 1
+            else:
+                category_matrix[i][1] = 1
+        return seq_matrix, category_matrix
+    else:
+        return seq_matrix, target_matrix
 
 
 def sequence2int(peptide_sequence):
@@ -155,19 +160,27 @@ def _accuracy(y, y_hat,variance):
   all_zero = np.mean(1 == y_hat)
   print('zero_variance: ' + str(round(np.mean(equal*variance), 10)))
   print('one_variance: ' + str(round(np.mean((1-equal)*variance), 10)))
-  return np.mean(binary_y== y_hat)
+  return np.mean(binary_y == y_hat)
 
 
-def aucs(y, y_hat, variance=0):
-    binary_y = np.clip(y, 0, 1)
-    mean_fpr, mean_tpr, mean_thresholds = roc_curve(y_hat, binary_y, pos_label=1)
+def aucs(y, y_hat, variance=0, binary=True):
+    # binary y in range (0, 1)
+    if binary:
+        y_true = np.clip(y, 0, 1)
+    else:
+        y_true = y
+    # y_hat is 0 or 1
+    if binary:
+        mean_fpr, mean_tpr, mean_thresholds = roc_curve(y_hat, y_true, pos_label=1)
+    else:
+        mean_fpr, mean_tpr, mean_thresholds = roc_curve(y_hat, y_true)
     mean_auc = auc(mean_fpr, mean_tpr)
-    rho, pValue = stats.spearmanr(y_hat, binary_y)
+    rho, pValue = stats.spearmanr(y_hat, y_true)
     print('SRCC: ' + str(round(rho, 3)))
     print('AUC: ' + str(round(mean_auc, 3)))
 
 
-def print_summary(name, labels, net_p, lin_p, loss,variance):
+def print_summary(name, labels, net_p, lin_p, loss, variance, binary=True):
   """Print summary information comparing a network with its linearization."""
   net_p = np.array(net_p)
   variance = np.diag(np.array(variance))
@@ -176,7 +189,7 @@ def print_summary(name, labels, net_p, lin_p, loss,variance):
   print('\nEvaluating Network on {} data.'.format(name))
   print('---------------------------------------')
   print('Network Accuracy = {}'.format(_accuracy(net_p, labels,variance)))
-  aucs(net_p, labels,variance)
+  aucs(net_p, labels, variance, binary=binary)
   print('Network Loss = {}'.format(loss(net_p, labels)))
   # if lin_p is not None:
   #   print('Linearization Accuracy = {}'.format(_accuracy(lin_p, labels)))

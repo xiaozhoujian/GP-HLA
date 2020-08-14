@@ -3,6 +3,7 @@ import tensorflow_datasets as tfds
 import neural_tangents as nt
 import numpy as np
 import time
+import pandas as pd
 
 
 def _partial_flatten_and_normalize(x):
@@ -99,6 +100,22 @@ def WideResnet(block_size, k, num_classes):
         stax.Dense(num_classes, 1., 0.))
 
 
+def diff(first, second):
+    second = set(second)
+    return [item for item in first if item not in second]
+
+
+def compare(file1, file2):
+    iedb_df = pd.read_csv(file1)
+    uniq_iedb_hla = iedb_df['HLA'].unique()
+    print(uniq_iedb_hla)
+    our_df = pd.read_csv(file2, sep='\t')
+    uniq_our_hla = our_df['HLA'].unique()
+    print(uniq_our_hla)
+    print("Differences of iedb - our is {}".format(diff(uniq_iedb_hla, uniq_our_hla)))
+    print("Differences of our - iedb is {}".format(diff(uniq_our_hla, uniq_iedb_hla)))
+
+
 def main():
     train_size = 1000
     test_size = 1000
@@ -126,4 +143,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    # main()
+    file1 = "/Users/jojen/Downloads/mhc_ligand_full_multi_file/mhc_class1.csv"
+    file2 = "/Users/jojen/Workspace/HLA/GP-HLA/data/MHC1_all_bool.txt"
+    compare(file1, file2)

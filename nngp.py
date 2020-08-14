@@ -14,14 +14,16 @@ from jax.api import jit
 from jax.experimental import optimizers
 from jax.experimental.stax import logsoftmax
 from jax.api import grad
+from utils import str2bool
 import datasets
 import jax.experimental.stax as ostax
-from sklearn.gaussian_process import GaussianProcessClassifier
+from sklearn.gaussian_process import GaussianProcessClassifier, GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import RBF, ConstantKernel as C
 
 import utils
 
-def infinite_fcn(train_embedding, test_embedding, data_set):
+
+def infinite_fcn(train_embedding, test_embedding, data_set, binary=True):
     _, _, kernel_fn = stax.serial(
         stax.Dense(64, 2., 0.05),
         stax.Relu(),
@@ -35,17 +37,13 @@ def infinite_fcn(train_embedding, test_embedding, data_set):
                          device_count=0,
                          batch_size=0)
     start = time.time()
-    data_set['Y_train']= np.argmax(data_set['Y_train'],-1)[:,np.newaxis]
-    data_set['Y_test']= np.argmax(data_set['Y_test'],-1)[:,np.newaxis]
     # Bayesian and infinite-time gradient descent inference with infinite network.
     #for i in range(10):
     predict_fn = \
             nt.predict.gradient_descent_mse_ensemble(kernel_fn, train_embedding, data_set['Y_train'],
                                                      diag_reg_absolute_scale=True, learning_rate=1, diag_reg=1e-3) #1e0 1e-3
 
-
-    nngp_mean, nngp_covariance = predict_fn(x_test=test_embedding, get='nngp',
-                                            compute_cov=True)
+    nngp_mean, nngp_covariance = predict_fn(x_test=test_embedding, get='nngp', compute_cov=True)
 
     #fx_test_nngp.block_until_ready()
     #fx_test_ntk.block_until_ready()
@@ -55,7 +53,7 @@ def infinite_fcn(train_embedding, test_embedding, data_set):
 
     # Print out accuracy and loss for infinite network predictions.
     loss = lambda fx, y_hat: 0.5 * np.mean((fx - y_hat) ** 2)
-    utils.print_summary('NNGP test', data_set['Y_test'], nngp_mean, None, loss,nngp_covariance)
+    utils.print_summary('NNGP test', data_set['Y_test'], nngp_mean, None, loss, nngp_covariance, binary=binary)
     #util.print_summary('NTK test', data_set['Y_test'], ntk_mean, None, loss)
 
 
@@ -134,21 +132,20 @@ def infinite_resnet(train_embedding, test_embedding, data_set):
     util.print_summary('NTK test', data_set['Y_test'], fx_test_ntk, None, loss)
 
 
-def gaussian_process(train_embedding, test_embedding, data_set):
-    # Instantiate a Gaussian Process model
-    kernel = 1.0 * RBF(1.0)
-    gp = GaussianProcessClassifier(kernel=kernel, random_state=0)
-    y_train = np.argmax(data_set['Y_train'], axis=-1)
-    # gp.fit(train_embedding, data_set['Y_train'])
-    gp.fit(train_embedding, y_train)
-    y_test = np.argmax(data_set['Y_test'], axis=-1)
+def gaussian_process(train_embedding, test_embedding, data_set, is_classifier=False, binary=True):
+    if is_classifier:
+        kernel = 1.0 * RBF(1.0)
+        gp = GaussianProcessClassifier(kernel=kernel, random_state=0)
+    else:
+        gp = GaussianProcessRegressor(random_state=0)
+    gp.fit(train_embedding, data_set['Y_train'])
     y_pred = gp.predict(test_embedding)
-    # utils.aucs(data_set['Y_test'], y_pred)
-    utils.aucs(y_test, y_pred)
+    utils.aucs(y_pred, data_set['Y_test'], binary=binary)
 
 
 def train(params, files):
-    data_set, peptide_n_mer = read_data_set(files, test_size=0.05)
+    binary = str2bool(params['binary'])
+    data_set, peptide_n_mer = read_data_set(files, test_size=0.05, binary=binary)
     print('Train data shape is {}'.format(data_set['X_train'].shape))
     print('Train data shape is {}'.format(data_set['X_test'].shape))
     # variable batch size depending on number of data points
@@ -178,9 +175,18 @@ def train(params, files):
     train_embedding = train_embedding.reshape((train_embedding.shape[0], -1))
     test_embedding = embedding(torch.from_numpy(data_set['X_test'])).numpy()
     test_embedding = test_embedding.reshape((test_embedding.shape[0], -1))
+    if str2bool(params['binary']):
+        data_set['Y_train'] = np.argmax(data_set['Y_train'], -1)[:, np.newaxis]
+        data_set['Y_test'] = np.argmax(data_set['Y_test'], -1)[:, np.newaxis]
+    else:
+        data_set['Y_train'] = data_set['Y_train'][:, np.newaxis]
+        data_set['Y_test'] = data_set['Y_test'][:, np.newaxis]
     # weight_space(train_embedding, test_embedding, data_set)
-    # infinite_fcn(train_embedding, test_embedding, data_set)
+    infinite_fcn(train_embedding, test_embedding, data_set, binary=binary)
     #infinite_resnet(train_embedding, test_embedding, data_set)
-    print("The result of gaussian process is:")
-    gaussian_process(train_embedding, test_embedding, data_set)
+    print("The result of gaussian process of regression is:")
+    gaussian_process(train_embedding, test_embedding, data_set, is_classifier=False, binary=binary)
+    # print("The result of gaussian process of classifier is:")
+    # gaussian_process(train_embedding, test_embedding, data_set, is_classifier=True)
+
 
